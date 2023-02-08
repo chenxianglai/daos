@@ -18,26 +18,6 @@ from exception_utils import CommandFailure
 class DfuseMUPerms(DfuseTestBase):
     """Verify dfuse multi-user basic permissions."""
 
-    def __init__(self, *args, **kwargs):
-        """Initialize a DfuseMUPerms object."""
-        super().__init__(*args, **kwargs)
-        self.dfuses = []
-
-    def stop_job_managers(self):
-        """Stop the dfuse instances.
-
-        Returns:
-            list: a list of exceptions raised stopping the job managers
-
-        """
-        error_list = super().stop_job_managers()
-        for dfuse in self.dfuses:
-            try:
-                dfuse.stop()
-            except CommandFailure as error:
-                error_list.append(error)
-        return error_list
-
     def test_dfuse_mu_perms(self):
         """Jira ID: DAOS-10854.
                     DAOS-10856.
@@ -87,13 +67,13 @@ class DfuseMUPerms(DfuseTestBase):
         cont = self.get_container(pool, daos_command=daos_command)
 
         # Run dfuse as dfuse_user
-        self.load_dfuse(client)
-        self.dfuse.run_user = dfuse_user
-        self.start_dfuse(client, pool, cont)
+        dfuse = get_dfuse(self, client)
+        dfuse.run_user = dfuse_user
+        start_dfuse(self, dfuse, pool=pool, container=cont)
 
         # Verify each permission mode and entry type
         for _mode, _type in product(('simple', 'real'), ('file', 'dir')):
-            path = os.path.join(self.dfuse.mount_dir.value, 'test_' + _type)
+            path = os.path.join(dfuse.mount_dir.value, 'test_' + _type)
             self.log.info('Verifying %s %s permissions on %s', _mode, _type, path)
             verify_perms_cmd.update_params(path=path, create_type=_type, verify_mode=_mode)
             verify_perms_cmd.run()
@@ -104,7 +84,7 @@ class DfuseMUPerms(DfuseTestBase):
             owner=original_users['group_user'],
             group_user=original_users['owner'],
             other_user=original_users['other_user'])
-        sub_dir = os.path.join(self.dfuse.mount_dir.value, 'dir1')
+        sub_dir = os.path.join(dfuse.mount_dir.value, 'dir1')
         self._create_dir_and_chown(
             client, sub_dir, create_as=dfuse_user, owner=verify_perms_cmd.owner.value)
 
@@ -121,7 +101,7 @@ class DfuseMUPerms(DfuseTestBase):
             owner=original_users['other_user'],
             group_user=None,
             other_user=original_users['owner'])
-        sub_dir = os.path.join(self.dfuse.mount_dir.value, 'dir2')
+        sub_dir = os.path.join(dfuse.mount_dir.value, 'dir2')
         self._create_dir_and_chown(
             client, sub_dir, create_as=dfuse_user,
             owner=verify_perms_cmd.owner.value, group='root')
@@ -215,14 +195,12 @@ class DfuseMUPerms(DfuseTestBase):
 
         self.log.info('Starting first dfuse instance')
         dfuse1 = get_dfuse(self, client, namespace='/run/dfuse_with_caching/*')
-        self.dfuses.append(dfuse1)
         dfuse1.update_params(mount_dir=(dfuse1.mount_dir.value + '_dfuse1'))
         dfuse1.run_user = dfuse_user
         start_dfuse(self, dfuse1, pool=pool, container=cont)
 
         self.log.info('Starting second dfuse instance')
         dfuse2 = get_dfuse(self, client, namespace='/run/dfuse_with_caching/*')
-        self.dfuses.append(dfuse2)
         dfuse2.update_params(mount_dir=(dfuse2.mount_dir.value + '_dfuse2'))
         dfuse2.run_user = dfuse_user
         start_dfuse(self, dfuse2, pool=pool, container=cont)

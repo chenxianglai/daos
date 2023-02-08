@@ -6,7 +6,6 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 from agent_utils import include_local_host
 
 from apricot import TestWithServers
-from exception_utils import CommandFailure
 from dfuse_utils import get_dfuse, start_dfuse
 
 
@@ -27,20 +26,6 @@ class DfuseTestBase(TestWithServers):
         # using localhost as client if client list is empty
         if not self.hostlist_clients:
             self.hostlist_clients = include_local_host(None)
-
-    def stop_job_managers(self):
-        """Stop the test job manager followed by dfuse.
-
-        Returns:
-            list: a list of exceptions raised stopping the agents
-
-        """
-        error_list = super().stop_job_managers()
-        try:
-            self.stop_dfuse()
-        except CommandFailure as error:
-            error_list.append("Error stopping dfuse: {}".format(error))
-        return error_list
 
     def load_dfuse(self, hosts, namespace=None):
         """Create a DfuseCommand object

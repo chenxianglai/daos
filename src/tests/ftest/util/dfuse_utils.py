@@ -74,6 +74,9 @@ class Dfuse(DfuseCommand):
         # which fusermount command to use for unmount
         self._fusermount_cmd = ""
 
+        # used by stop() to know cleanup is needed
+        self.__need_cleanup = False
+
     def __del__(self):
         """Destruct the object."""
         if self._running_hosts:
@@ -259,6 +262,9 @@ class Dfuse(DfuseCommand):
             if not self._fusermount_cmd:
                 raise CommandFailure(f'Failed to get fusermount command on: {self.hosts}')
 
+        # mark the instance as needing cleanup before starting setup
+        self.__need_cleanup = True
+
         # setup the mount point
         self._setup_mount_point()
 
@@ -353,6 +359,9 @@ class Dfuse(DfuseCommand):
             CommandFailure: In case dfuse stop fails
 
         """
+        if not self.__need_cleanup:
+            return
+
         self.log.info("Stopping dfuse at %s on %s", self.mount_dir.value, self.hosts)
 
         if self.mount_dir.value is None:
@@ -378,6 +387,9 @@ class Dfuse(DfuseCommand):
         # Report any errors
         if error_list:
             raise CommandFailure("\n".join(error_list))
+
+        # Only assume clean if nothing above failed
+        self.__need_cleanup = False
 
 
 def get_dfuse(test, hosts, namespace=None):
@@ -429,9 +441,29 @@ def start_dfuse(test, dfuse, pool=None, container=None, **params):
     try:
         dfuse.bind_cores = test.params.get('cores', dfuse.namespace, None)
         dfuse.run()
+        test.register_cleanup(stop_dfuse, test=test, dfuse=dfuse)
     except CommandFailure as error:
         test.log.error("Failed to start dfuse on hosts %s", dfuse.hosts, exc_info=error)
         test.fail("Failed to start dfuse")
+
+def stop_dfuse(test, dfuse):
+    """Stop a dfuse instance.
+
+    Args:
+        test (Test): the test from which to stop dfuse
+        dfuse (Dfuse): the dfuse instance to stop
+
+    Returns:
+        list: a list of any errors detected when stopping dfuse
+
+    """
+    error_list = []
+    try:
+        dfuse.stop()
+    except (CommandFailure) as error:
+        test.test_log.info("  {}".format(error))
+        error_list.append("Error stopping dfuse: {}".format(error))
+    return error_list
 
 
 class VerifyPermsCommand(ExecutableCommand):
